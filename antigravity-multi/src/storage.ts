@@ -89,7 +89,31 @@ export async function ensureStorageDir(storageDirPath = EXTENSION_STORAGE_DIR): 
 async function isLockStale(lockPath: string, staleMs: number): Promise<boolean> {
   try {
     const lockStats = await stat(lockPath);
-    return Date.now() - lockStats.mtimeMs > staleMs;
+
+    if (Date.now() - lockStats.mtimeMs > staleMs) {
+      return true;
+    }
+
+    try {
+      const content = await readFile(lockPath, "utf-8");
+      const pidMatch = content.match(/pid=(\d+)/);
+      if (pidMatch?.[1]) {
+        const pid = Number.parseInt(pidMatch[1], 10);
+        if (Number.isFinite(pid) && pid > 0) {
+          try {
+            process.kill(pid, 0);
+          } catch (killError) {
+            if (getErrorCode(killError) === "ESRCH") {
+              return true;
+            }
+          }
+        }
+      }
+    } catch {
+      // Can't read lock content; fall through to time-based check only.
+    }
+
+    return false;
   } catch (error) {
     if (getErrorCode(error) === "ENOENT") {
       return false;

@@ -1,9 +1,14 @@
 const SECRET_PATTERNS = [
   /"refreshToken"\s*:\s*"[^"]+"/gi,
+  /"accessToken"\s*:\s*"[^"]+"/gi,
   /"access"\s*:\s*"[^"]+"/gi,
   /"refresh"\s*:\s*"[^"]+"/gi,
   /"token"\s*:\s*"[^"]+"/gi,
-  /Bearer\s+[A-Za-z0-9._\-]+/gi
+  /"apiKey"\s*:\s*"[^"]+"/gi,
+  /"api_key"\s*:\s*"[^"]+"/gi,
+  /"authorization"\s*:\s*"[^"]+"/gi,
+  /Bearer\s+[A-Za-z0-9._\-]+/gi,
+  /[?&](access_token|refresh_token|token|code)=[^&\s]+/gi
 ];
 
 export function redactSecrets(text: string): string {
@@ -12,6 +17,11 @@ export function redactSecrets(text: string): string {
     redacted = redacted.replace(pattern, (match) => {
       if (match.startsWith("Bearer ")) {
         return "Bearer [REDACTED]";
+      }
+
+      const paramMatch = match.match(/^([?&][^=]+=)/);
+      if (paramMatch?.[1]) {
+        return `${paramMatch[1]}[REDACTED]`;
       }
 
       const separatorIndex = match.indexOf(":");
