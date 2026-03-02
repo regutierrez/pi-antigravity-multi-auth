@@ -33,7 +33,8 @@ pi --extension /home/pael/playground/pi-ag-multi-auth/antigravity-multi/index.ts
 
 ## Current commands
 
-- `/login google-antigravity-multi` to add one or more Antigravity OAuth accounts.
+- `/login google-antigravity-multi` adds one Antigravity OAuth account per login run.
+  - Re-run `/login google-antigravity-multi` to append additional accounts.
   - Supports OAuth callback + manual redirect URL paste fallback (headless-friendly).
   - Escape/Ctrl+C cancels the login flow.
 - `/ag-accounts` to list pooled accounts.

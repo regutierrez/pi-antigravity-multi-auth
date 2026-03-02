@@ -40,11 +40,6 @@ function parsePoolAction(value: string): LoginPoolAction | undefined {
   return undefined;
 }
 
-function parseYesNo(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  return normalized === "y" || normalized === "yes";
-}
-
 async function promptPoolAction(callbacks: OAuthLoginCallbacks, accountCount: number): Promise<LoginPoolAction> {
   while (true) {
     const response = await callbacks.onPrompt({
@@ -59,14 +54,6 @@ async function promptPoolAction(callbacks: OAuthLoginCallbacks, accountCount: nu
 
     callbacks.onProgress?.("Invalid choice. Enter add, fresh, or cancel.");
   }
-}
-
-async function promptAddAnother(callbacks: OAuthLoginCallbacks): Promise<boolean> {
-  const response = await callbacks.onPrompt({
-    message: "Add another Antigravity account? [y/N]",
-    placeholder: "n"
-  });
-  return parseYesNo(response);
 }
 
 function buildManagerCredential(params: {
@@ -116,8 +103,6 @@ function isLoginCancellation(error: unknown, callbacks: OAuthLoginCallbacks): bo
 }
 
 export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise<MultiAccountManagerCredential> {
-  let latestCredential: MultiAccountManagerCredential | null = null;
-
   try {
     const existingCount = await withLoadedAccountStore((store) => store.accounts.length);
 
@@ -130,67 +115,46 @@ export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise
       throw new Error("Login cancelled");
     }
 
-    let shouldResetStore = action === "fresh";
+    const credentials = await loginAntigravity(
+      callbacks.onAuth,
+      callbacks.onProgress,
+      createManualCodeInputCallback(callbacks)
+    );
 
-    while (true) {
-      const credentials = await loginAntigravity(
-        callbacks.onAuth,
-        callbacks.onProgress,
-        createManualCodeInputCallback(callbacks)
-      );
+    const refreshToken = getStringField(credentials.refresh, "refresh token");
+    const accessToken = getStringField(credentials.access, "access token");
+    const projectId = getStringField(credentials["projectId"], "projectId");
+    const email = normalizeEmail(credentials["email"], refreshToken);
 
-      const refreshToken = getStringField(credentials.refresh, "refresh token");
-      const accessToken = getStringField(credentials.access, "access token");
-      const projectId = getStringField(credentials["projectId"], "projectId");
-      const email = normalizeEmail(credentials["email"], refreshToken);
+    const accountCount = await mutateAccountStore((currentStore) => {
+      const workingStore = action === "fresh" ? createEmptyAccountStore() : currentStore;
 
-      const accountCount = await mutateAccountStore((currentStore) => {
-        const workingStore = shouldResetStore ? createEmptyAccountStore() : currentStore;
-        shouldResetStore = false;
-
-        const insertedIndex = upsertAccount(workingStore, {
-          email,
-          refreshToken,
-          projectId
-        });
-
-        setActiveAccount(workingStore, "claude", insertedIndex);
-        setActiveAccount(workingStore, "gemini", insertedIndex);
-
-        return {
-          store: workingStore,
-          result: workingStore.accounts.length
-        };
-      });
-
-      latestCredential = buildManagerCredential({
-        refreshToken,
-        projectId,
+      const insertedIndex = upsertAccount(workingStore, {
         email,
-        accessToken,
-        accountCount
+        refreshToken,
+        projectId
       });
 
-      callbacks.onProgress?.(`Added account ${email}. Pool size: ${accountCount}`);
+      setActiveAccount(workingStore, "claude", insertedIndex);
+      setActiveAccount(workingStore, "gemini", insertedIndex);
 
-      const addAnother = await promptAddAnother(callbacks);
-      if (!addAnother) {
-        break;
-      }
-    }
+      return {
+        store: workingStore,
+        result: workingStore.accounts.length
+      };
+    });
 
-    if (!latestCredential) {
-      throw new Error("No Antigravity account was added");
-    }
+    callbacks.onProgress?.(`Added account ${email}. Pool size: ${accountCount}`);
 
-    return latestCredential;
+    return buildManagerCredential({
+      refreshToken,
+      projectId,
+      email,
+      accessToken,
+      accountCount
+    });
   } catch (error) {
     if (isLoginCancellation(error, callbacks)) {
-      if (latestCredential) {
-        callbacks.onProgress?.("Login cancelled; keeping accounts added so far.");
-        return latestCredential;
-      }
-
       throw new Error("Login cancelled");
     }
     throw error;
