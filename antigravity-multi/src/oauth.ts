@@ -120,6 +120,8 @@ function isLoginCancellation(error: unknown, callbacks: OAuthLoginCallbacks): bo
 }
 
 export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise<MultiAccountManagerCredential> {
+  let latestCredential: MultiAccountManagerCredential | null = null;
+
   try {
     const existingCount = await withLoadedAccountStore((store) => store.accounts.length);
 
@@ -133,7 +135,6 @@ export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise
     }
 
     let shouldResetStore = action === "fresh";
-    let latestCredential: MultiAccountManagerCredential | null = null;
 
     while (true) {
       const credentials = await loginAntigravity(
@@ -189,6 +190,11 @@ export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise
     return latestCredential;
   } catch (error) {
     if (isLoginCancellation(error, callbacks)) {
+      if (latestCredential) {
+        callbacks.onProgress?.("Login cancelled; keeping accounts added so far.");
+        return latestCredential;
+      }
+
       throw new Error("Login cancelled");
     }
     throw error;
