@@ -30,3 +30,11 @@ pi --extension /home/pael/playground/pi-ag-multi-auth/antigravity-multi/index.ts
 ```
 
 (Use `/reload` when loading via auto-discovery paths.)
+
+## Current commands
+
+- `/login google-antigravity-multi` to add one or more Antigravity OAuth accounts.
+- `/ag-accounts` to list pooled accounts.
+- `/ag-accounts enable <index>` / `/ag-accounts disable <index>`.
+- `/ag-accounts set-active <claude|gemini> <index|none>`.
+- `/ag-accounts remove <index>`.
