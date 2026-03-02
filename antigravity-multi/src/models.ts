@@ -1,10 +1,10 @@
-import { MODELS } from "@mariozechner/pi-ai/dist/models.generated.js";
+import { getModels } from "@mariozechner/pi-ai";
 import type { ProviderModelConfig } from "@mariozechner/pi-coding-agent";
 
 const ANTIGRAVITY_PROVIDER_ID = "google-antigravity" as const;
 
 export function getAntigravitySourceModels(): ProviderModelConfig[] {
-  return Object.values(MODELS[ANTIGRAVITY_PROVIDER_ID]).map((model) => ({
+  return getModels(ANTIGRAVITY_PROVIDER_ID).map((model) => ({
     id: model.id,
     name: model.name,
     reasoning: model.reasoning,
