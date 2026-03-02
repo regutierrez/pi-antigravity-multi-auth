@@ -1,7 +1,5 @@
 # antigravity-multi
 
-Development workspace for the `google-antigravity-multi` pi extension.
-
 ## Setup
 
 ```bash
