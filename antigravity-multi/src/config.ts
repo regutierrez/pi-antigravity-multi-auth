@@ -4,6 +4,7 @@ import { join } from "node:path";
 export const EXTENSION_ID = "antigravity-multi" as const;
 export const PROVIDER_ID = "google-antigravity-multi" as const;
 export const PROVIDER_API_ID = "google-antigravity-multi-api" as const;
+export const ANTIGRAVITY_BASE_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com" as const;
 
 export const ACCOUNTS_FILE_NAME = "accounts.json" as const;
 
