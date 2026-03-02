@@ -95,10 +95,6 @@ function getStringField(value: unknown, field: string): string {
 }
 
 function createManualCodeInputCallback(callbacks: OAuthLoginCallbacks): () => Promise<string> {
-  if (callbacks.onManualCodeInput) {
-    return callbacks.onManualCodeInput;
-  }
-
   return () =>
     callbacks.onPrompt({
       message: "Paste redirect URL below, or complete login in browser:",
