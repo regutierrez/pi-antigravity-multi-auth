@@ -1,0 +1,4 @@
+node_modules/
+antigravity-multi/node_modules/
+*.log
+.DS_Store
