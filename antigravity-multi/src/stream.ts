@@ -1,6 +1,7 @@
 import {
   createAssistantMessageEventStream,
   refreshAntigravityToken,
+  streamSimpleGoogleGeminiCli,
   type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
@@ -9,7 +10,6 @@ import {
   type Model,
   type SimpleStreamOptions
 } from "@mariozechner/pi-ai";
-import { streamSimpleGoogleGeminiCli } from "@mariozechner/pi-ai/dist/providers/google-gemini-cli.js";
 
 import {
   detectModelFamily,

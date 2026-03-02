@@ -1,4 +1,4 @@
-import { extractRetryDelay } from "@mariozechner/pi-ai/dist/providers/google-gemini-cli.js";
+import { extractRetryDelay } from "@mariozechner/pi-ai";
 
 export const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 60_000;
 

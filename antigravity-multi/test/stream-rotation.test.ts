@@ -88,17 +88,7 @@ vi.mock("@mariozechner/pi-ai", async () => {
   const actual = await vi.importActual<typeof import("@mariozechner/pi-ai")>("@mariozechner/pi-ai");
   return {
     ...actual,
-    refreshAntigravityToken: (...args: unknown[]) => refreshMock(...args)
-  };
-});
-
-vi.mock("@mariozechner/pi-ai/dist/providers/google-gemini-cli.js", async () => {
-  const actual = await vi.importActual<typeof import("@mariozechner/pi-ai/dist/providers/google-gemini-cli.js")>(
-    "@mariozechner/pi-ai/dist/providers/google-gemini-cli.js"
-  );
-
-  return {
-    ...actual,
+    refreshAntigravityToken: (...args: unknown[]) => refreshMock(...args),
     streamSimpleGoogleGeminiCli: (...args: unknown[]) => streamSimpleMock(...args)
   };
 });
