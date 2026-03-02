@@ -34,6 +34,8 @@ pi --extension /home/pael/playground/pi-ag-multi-auth/antigravity-multi/index.ts
 ## Current commands
 
 - `/login google-antigravity-multi` to add one or more Antigravity OAuth accounts.
+  - Supports callback-server login with manual redirect URL paste fallback.
+  - Escape/Ctrl+C cancels the login flow.
 - `/ag-accounts` to list pooled accounts.
 - `/ag-accounts enable <index>` / `/ag-accounts disable <index>`.
 - `/ag-accounts set-active <claude|gemini> <index|none>`.

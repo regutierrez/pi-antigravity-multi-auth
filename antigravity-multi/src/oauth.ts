@@ -94,69 +94,105 @@ function getStringField(value: unknown, field: string): string {
   throw new Error(`Missing ${field} in Antigravity OAuth response`);
 }
 
+function createManualCodeInputCallback(callbacks: OAuthLoginCallbacks): () => Promise<string> {
+  if (callbacks.onManualCodeInput) {
+    return callbacks.onManualCodeInput;
+  }
+
+  return () =>
+    callbacks.onPrompt({
+      message: "Paste redirect URL below, or complete login in browser:",
+      placeholder: "http://localhost:51121/oauth-callback?code=..."
+    });
+}
+
+function isLoginCancellation(error: unknown, callbacks: OAuthLoginCallbacks): boolean {
+  if (callbacks.signal?.aborted) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("cancel") || message.includes("aborted");
+}
+
 export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise<MultiAccountManagerCredential> {
-  const existingCount = await withLoadedAccountStore((store) => store.accounts.length);
+  try {
+    const existingCount = await withLoadedAccountStore((store) => store.accounts.length);
 
-  let action: LoginPoolAction = "add";
-  if (existingCount > 0) {
-    action = await promptPoolAction(callbacks, existingCount);
-  }
+    let action: LoginPoolAction = "add";
+    if (existingCount > 0) {
+      action = await promptPoolAction(callbacks, existingCount);
+    }
 
-  if (action === "cancel") {
-    throw new Error("Login cancelled by user");
-  }
+    if (action === "cancel") {
+      throw new Error("Login cancelled");
+    }
 
-  let shouldResetStore = action === "fresh";
-  let latestCredential: MultiAccountManagerCredential | null = null;
+    let shouldResetStore = action === "fresh";
+    let latestCredential: MultiAccountManagerCredential | null = null;
 
-  while (true) {
-    const credentials = await loginAntigravity(callbacks.onAuth, callbacks.onProgress, callbacks.onManualCodeInput);
+    while (true) {
+      const credentials = await loginAntigravity(
+        callbacks.onAuth,
+        callbacks.onProgress,
+        createManualCodeInputCallback(callbacks)
+      );
 
-    const refreshToken = getStringField(credentials.refresh, "refresh token");
-    const accessToken = getStringField(credentials.access, "access token");
-    const projectId = getStringField(credentials["projectId"], "projectId");
-    const email = normalizeEmail(credentials["email"], refreshToken);
+      const refreshToken = getStringField(credentials.refresh, "refresh token");
+      const accessToken = getStringField(credentials.access, "access token");
+      const projectId = getStringField(credentials["projectId"], "projectId");
+      const email = normalizeEmail(credentials["email"], refreshToken);
 
-    const accountCount = await mutateAccountStore((currentStore) => {
-      const workingStore = shouldResetStore ? createEmptyAccountStore() : currentStore;
-      shouldResetStore = false;
+      const accountCount = await mutateAccountStore((currentStore) => {
+        const workingStore = shouldResetStore ? createEmptyAccountStore() : currentStore;
+        shouldResetStore = false;
 
-      const insertedIndex = upsertAccount(workingStore, {
-        email,
-        refreshToken,
-        projectId
+        const insertedIndex = upsertAccount(workingStore, {
+          email,
+          refreshToken,
+          projectId
+        });
+
+        setActiveAccount(workingStore, "claude", insertedIndex);
+        setActiveAccount(workingStore, "gemini", insertedIndex);
+
+        return {
+          store: workingStore,
+          result: workingStore.accounts.length
+        };
       });
 
-      setActiveAccount(workingStore, "claude", insertedIndex);
-      setActiveAccount(workingStore, "gemini", insertedIndex);
+      latestCredential = buildManagerCredential({
+        refreshToken,
+        projectId,
+        email,
+        accessToken,
+        accountCount
+      });
 
-      return {
-        store: workingStore,
-        result: workingStore.accounts.length
-      };
-    });
+      callbacks.onProgress?.(`Added account ${email}. Pool size: ${accountCount}`);
 
-    latestCredential = buildManagerCredential({
-      refreshToken,
-      projectId,
-      email,
-      accessToken,
-      accountCount
-    });
-
-    callbacks.onProgress?.(`Added account ${email}. Pool size: ${accountCount}`);
-
-    const addAnother = await promptAddAnother(callbacks);
-    if (!addAnother) {
-      break;
+      const addAnother = await promptAddAnother(callbacks);
+      if (!addAnother) {
+        break;
+      }
     }
-  }
 
-  if (!latestCredential) {
-    throw new Error("No Antigravity account was added");
-  }
+    if (!latestCredential) {
+      throw new Error("No Antigravity account was added");
+    }
 
-  return latestCredential;
+    return latestCredential;
+  } catch (error) {
+    if (isLoginCancellation(error, callbacks)) {
+      throw new Error("Login cancelled");
+    }
+    throw error;
+  }
 }
 
 export async function refreshMultiAccountManagerCredential(

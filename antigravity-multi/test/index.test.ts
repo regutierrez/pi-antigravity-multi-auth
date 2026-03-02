@@ -21,12 +21,13 @@ describe("extension entrypoint", () => {
 
     const providerConfig = providerCalls[0]?.config as {
       models?: Array<{ id: string }>;
-      oauth?: { name: string };
+      oauth?: { name: string; usesCallbackServer?: boolean };
       streamSimple?: unknown;
     };
 
     expect(providerConfig.models?.length).toBeGreaterThan(0);
     expect(providerConfig.oauth?.name).toContain("Antigravity");
+    expect(providerConfig.oauth?.usesCallbackServer).toBe(true);
     expect(typeof providerConfig.streamSimple).toBe("function");
 
     expect(commandCalls.some((command) => command.name === "ag-accounts")).toBe(true);
