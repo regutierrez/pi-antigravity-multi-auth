@@ -69,9 +69,8 @@ export function selectAccountForFamily(store: AccountStore, family: ModelFamily,
   }
 
   const enabledIndices = store.accounts
-    .map((account, index) => ({ account, index }))
-    .filter(({ account }) => account.enabled)
-    .map(({ index }) => index);
+    .map((_, i) => i)
+    .filter((i) => store.accounts[i]?.enabled);
 
   if (enabledIndices.length === 0) {
     return { kind: "none", waitMs: 0 };
@@ -142,11 +141,8 @@ export function setAccountEnabled(store: AccountStore, index: number, enabled: b
   account.enabled = enabled;
 
   if (!enabled) {
-    if (store.activeIndexByFamily.claude === index) {
-      store.activeIndexByFamily.claude = null;
-    }
-    if (store.activeIndexByFamily.gemini === index) {
-      store.activeIndexByFamily.gemini = null;
+    for (const family of ["claude", "gemini"] as const) {
+      if (store.activeIndexByFamily[family] === index) store.activeIndexByFamily[family] = null;
     }
   }
 }
@@ -177,19 +173,9 @@ export function removeAccountAtIndex(store: AccountStore, index: number): void {
   store.accounts.splice(index, 1);
 
   for (const family of ["claude", "gemini"] as const) {
-    const activeIndex = store.activeIndexByFamily[family];
-    if (activeIndex === null) {
-      continue;
-    }
-
-    if (activeIndex === index) {
-      store.activeIndexByFamily[family] = null;
-      continue;
-    }
-
-    if (activeIndex > index) {
-      store.activeIndexByFamily[family] = activeIndex - 1;
-    }
+    const active = store.activeIndexByFamily[family];
+    if (active === index) store.activeIndexByFamily[family] = null;
+    else if (active !== null && active > index) store.activeIndexByFamily[family] = active - 1;
   }
 }
 

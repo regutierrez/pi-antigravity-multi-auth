@@ -20,8 +20,9 @@ import {
 } from "./accounts.js";
 import { formatSafeError } from "./logger.js";
 import { shouldRotateOnError } from "./rate-limit.js";
-import { mutateAccountStore, withLoadedAccountStore } from "./storage.js";
+import { updateAccountStore, withLoadedAccountStore } from "./storage.js";
 import type { Account, ModelFamily } from "./types.js";
+import { formatDuration } from "./utils.js";
 
 type AccountAccessToken = {
   accessToken: string;
@@ -66,65 +67,28 @@ async function getAccessTokenForAccount(account: Account): Promise<string> {
   return refreshed.access;
 }
 
+const ZERO_USAGE: AssistantMessage["usage"] = {
+  input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+};
+
 function createErrorAssistantMessage(model: Model<Api>, message: string, stopReason: "aborted" | "error"): AssistantMessage {
   return {
-    role: "assistant",
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        total: 0
-      }
-    },
-    stopReason,
-    errorMessage: message,
-    timestamp: Date.now()
+    role: "assistant", content: [], api: model.api, provider: model.provider, model: model.id,
+    usage: { ...ZERO_USAGE, cost: { ...ZERO_USAGE.cost } },
+    stopReason, errorMessage: message, timestamp: Date.now()
   };
 }
 
-function formatCooldown(waitMs: number): string {
-  if (waitMs < 1000) {
-    return `${waitMs}ms`;
-  }
-
-  const seconds = Math.ceil(waitMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  const minutes = Math.ceil(seconds / 60);
-  return `${minutes}m`;
-}
-
 function toAntigravityModel(model: Model<Api>): Model<"google-gemini-cli"> {
+  const { api: _, provider: __, compat: ___, ...rest } = model;
   return {
-    id: model.id,
-    name: model.name,
+    ...rest,
     api: "google-gemini-cli",
     provider: "google-antigravity",
-    baseUrl: model.baseUrl,
-    reasoning: model.reasoning,
     input: [...model.input],
-    cost: {
-      input: model.cost.input,
-      output: model.cost.output,
-      cacheRead: model.cost.cacheRead,
-      cacheWrite: model.cost.cacheWrite
-    },
-    contextWindow: model.contextWindow,
-    maxTokens: model.maxTokens,
-    ...(model.headers ? { headers: { ...model.headers } } : {})
+    cost: { ...model.cost },
+    ...(model.headers && { headers: { ...model.headers } })
   };
 }
 
@@ -133,98 +97,32 @@ function shouldCommitBufferedEvents(event: AssistantMessageEvent): boolean {
 }
 
 async function markSuccessfulAttempt(index: number, family: ModelFamily): Promise<void> {
-  await mutateAccountStore((store) => {
-    const account = store.accounts[index];
-    if (!account) {
-      return { store, result: undefined };
-    }
-
+  await updateAccountStore((store) => {
+    if (!store.accounts[index]) return;
     markAccountUsed(store, family, index);
-    account.verificationRequired = false;
-
-    return {
-      store,
-      result: undefined
-    };
+    store.accounts[index]!.verificationRequired = false;
   });
 }
 
 async function markRateLimitedAttempt(index: number, family: ModelFamily, cooldownMs: number): Promise<void> {
-  await mutateAccountStore((store) => {
-    const account = store.accounts[index];
-    if (!account) {
-      return { store, result: undefined };
-    }
-
-    const resetAt = Date.now() + Math.max(1_000, cooldownMs);
-    markAccountRateLimited(store, family, index, resetAt);
-
-    return {
-      store,
-      result: undefined
-    };
+  await updateAccountStore((store) => {
+    if (!store.accounts[index]) return;
+    markAccountRateLimited(store, family, index, Date.now() + Math.max(1_000, cooldownMs));
   });
 }
 
 async function disableBrokenAccount(index: number): Promise<void> {
-  await mutateAccountStore((store) => {
-    const account = store.accounts[index];
-    if (!account) {
-      return { store, result: undefined };
-    }
-
-    account.verificationRequired = true;
+  await updateAccountStore((store) => {
+    if (!store.accounts[index]) return;
+    store.accounts[index]!.verificationRequired = true;
     setAccountEnabled(store, index, false);
-
-    return {
-      store,
-      result: undefined
-    };
   });
 }
 
-async function getSelection(family: ModelFamily): Promise<
-  | {
-      kind: "selected";
-      index: number;
-      account: Account;
-      enabledCount: number;
-    }
-  | {
-      kind: "wait";
-      waitMs: number;
-      enabledCount: number;
-    }
-  | {
-      kind: "none";
-      enabledCount: number;
-    }
-> {
+async function getSelection(family: ModelFamily) {
   return withLoadedAccountStore((store) => {
-    const enabledCount = store.accounts.filter((account) => account.enabled).length;
-    const selection = selectAccountForFamily(store, family);
-
-    if (selection.kind === "selected") {
-      return {
-        kind: "selected" as const,
-        account: selection.account,
-        index: selection.index,
-        enabledCount
-      };
-    }
-
-    if (selection.kind === "wait") {
-      return {
-        kind: "wait" as const,
-        waitMs: selection.waitMs,
-        enabledCount
-      };
-    }
-
-    return {
-      kind: "none" as const,
-      enabledCount
-    };
+    const enabledCount = store.accounts.filter((a) => a.enabled).length;
+    return { ...selectAccountForFamily(store, family), enabledCount };
   });
 }
 
@@ -252,7 +150,7 @@ export function streamWithAccountRotation(
 
         if (selection.kind === "wait") {
           throw new Error(
-            `All enabled Antigravity accounts are cooling down. Earliest reset in ${formatCooldown(selection.waitMs)}.`
+            `All enabled Antigravity accounts are cooling down. Earliest reset in ${formatDuration(selection.waitMs)}.`
           );
         }
 

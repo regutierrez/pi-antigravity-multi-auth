@@ -1,8 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import { getCooldownMs, setAccountEnabled, setActiveAccount, removeAccountAtIndex } from "./accounts.js";
-import { mutateAccountStore, withLoadedAccountStore } from "./storage.js";
+import { mutateAccountStore, updateAccountStore, withLoadedAccountStore } from "./storage.js";
 import type { ModelFamily } from "./types.js";
+import { formatDuration } from "./utils.js";
 
 const COMMAND_NAME = "ag-accounts";
 
@@ -89,23 +90,6 @@ function parseCommand(args: string): ParsedCommand {
   throw new Error(`Unknown action: ${firstToken}`);
 }
 
-function formatDuration(waitMs: number): string {
-  if (waitMs <= 0) {
-    return "ready";
-  }
-
-  if (waitMs < 1000) {
-    return `${waitMs}ms`;
-  }
-
-  const seconds = Math.ceil(waitMs / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-
-  return `${Math.ceil(seconds / 60)}m`;
-}
-
 async function renderAccountList(): Promise<string> {
   return withLoadedAccountStore((store) => {
     if (store.accounts.length === 0) {
@@ -171,37 +155,19 @@ export function registerAccountCommands(pi: ExtensionAPI): void {
           return;
         }
 
-        if (command.action === "enable") {
+        if (command.action === "enable" || command.action === "disable") {
+          const enabled = command.action === "enable";
           const email = await mutateAccountStore((store) => {
-            setAccountEnabled(store, command.index, true);
-            return {
-              store,
-              result: store.accounts[command.index]?.email ?? "<unknown>"
-            };
+            setAccountEnabled(store, command.index, enabled);
+            return { store, result: store.accounts[command.index]?.email ?? "<unknown>" };
           });
-          ctx.ui.notify(`Enabled account #${command.index} (${email})`, "info");
-          return;
-        }
-
-        if (command.action === "disable") {
-          const email = await mutateAccountStore((store) => {
-            setAccountEnabled(store, command.index, false);
-            return {
-              store,
-              result: store.accounts[command.index]?.email ?? "<unknown>"
-            };
-          });
-          ctx.ui.notify(`Disabled account #${command.index} (${email})`, "info");
+          ctx.ui.notify(`${enabled ? "Enabled" : "Disabled"} account #${command.index} (${email})`, "info");
           return;
         }
 
         if (command.action === "set-active") {
-          await mutateAccountStore((store) => {
+          await updateAccountStore((store) => {
             setActiveAccount(store, command.family, command.index);
-            return {
-              store,
-              result: undefined
-            };
           });
           const label = command.index === null ? "none" : `#${command.index}`;
           ctx.ui.notify(`Set ${command.family} active account to ${label}`, "info");

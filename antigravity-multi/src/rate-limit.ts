@@ -45,15 +45,7 @@ export function shouldRotateOnError(errorMessage: string): {
   }
 
   const statusCode = parseStatusCode(errorMessage);
-  if (typeof statusCode === "number" && ROTATE_STATUS_CODES.has(statusCode)) {
-    return {
-      rotate: true,
-      cooldownMs: getRateLimitCooldownMs(errorMessage),
-      isAuthError: false
-    };
-  }
-
-  if (hasRateLimitSignal(errorMessage)) {
+  if ((typeof statusCode === "number" && ROTATE_STATUS_CODES.has(statusCode)) || hasRateLimitSignal(errorMessage)) {
     return {
       rotate: true,
       cooldownMs: getRateLimitCooldownMs(errorMessage),

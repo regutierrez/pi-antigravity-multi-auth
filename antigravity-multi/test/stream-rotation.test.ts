@@ -105,6 +105,9 @@ vi.mock("../src/storage.js", async () => {
       const { store, result } = await mutator(inMemoryStore);
       inMemoryStore = store;
       return result;
+    },
+    updateAccountStore: async (fn: (store: AccountStore) => void | Promise<void>) => {
+      await fn(inMemoryStore);
     }
   };
 });

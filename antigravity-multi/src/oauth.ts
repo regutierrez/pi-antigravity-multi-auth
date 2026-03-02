@@ -6,6 +6,7 @@ import {
 
 import { setActiveAccount, upsertAccount } from "./accounts.js";
 import { createEmptyAccountStore, mutateAccountStore, withLoadedAccountStore } from "./storage.js";
+import { strOr } from "./utils.js";
 
 const MANAGER_CREDENTIAL_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 export const MANAGER_CREDENTIAL_MODE = "multi-account-manager" as const;
@@ -90,16 +91,7 @@ function createManualCodeInputCallback(callbacks: OAuthLoginCallbacks): () => Pr
 }
 
 function isLoginCancellation(error: unknown, callbacks: OAuthLoginCallbacks): boolean {
-  if (callbacks.signal?.aborted) {
-    return true;
-  }
-
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
-  return message.includes("cancel") || message.includes("aborted");
+  return callbacks.signal?.aborted || (error instanceof Error && /cancel|aborted/i.test(error.message)) || false;
 }
 
 export async function loginMultiAccount(callbacks: OAuthLoginCallbacks): Promise<MultiAccountManagerCredential> {
@@ -166,41 +158,18 @@ export async function refreshMultiAccountManagerCredential(
 ): Promise<MultiAccountManagerCredential> {
   const accountCount = await withLoadedAccountStore((store) => store.accounts.length);
 
-  const refreshToken =
-    typeof credentials.refresh === "string" && credentials.refresh.length > 0
-      ? credentials.refresh
-      : "multi-account-refresh";
-
-  const accessToken =
-    typeof credentials.access === "string" && credentials.access.length > 0 ? credentials.access : "multi-account-access";
-
-  const projectId =
-    typeof credentials["projectId"] === "string" && credentials["projectId"].length > 0
-      ? credentials["projectId"]
-      : "multi-account-project";
-
-  const email =
-    typeof credentials["email"] === "string" && credentials["email"].length > 0
-      ? credentials["email"]
-      : "multi-account@antigravity.local";
-
   return buildManagerCredential({
-    refreshToken,
-    projectId,
-    email,
-    accessToken,
+    refreshToken: strOr(credentials.refresh, "multi-account-refresh"),
+    accessToken: strOr(credentials.access, "multi-account-access"),
+    projectId: strOr(credentials["projectId"], "multi-account-project"),
+    email: strOr(credentials["email"], "multi-account@antigravity.local"),
     accountCount
   });
 }
 
 export function getManagerApiKey(credentials: OAuthCredentials): string {
-  const token =
-    typeof credentials.access === "string" && credentials.access.length > 0 ? credentials.access : "multi-account-access";
-
-  const projectId =
-    typeof credentials["projectId"] === "string" && credentials["projectId"].length > 0
-      ? credentials["projectId"]
-      : "multi-account-project";
-
-  return JSON.stringify({ token, projectId });
+  return JSON.stringify({
+    token: strOr(credentials.access, "multi-account-access"),
+    projectId: strOr(credentials["projectId"], "multi-account-project")
+  });
 }

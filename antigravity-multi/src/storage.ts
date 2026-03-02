@@ -15,6 +15,12 @@ import {
 } from "./config.js";
 import { ACCOUNT_STORE_VERSION, AccountStoreSchema, type AccountStore } from "./types.js";
 
+export type LockOptions = {
+  timeoutMs?: number;
+  retryMs?: number;
+  staleMs?: number;
+};
+
 type AccountStoreLock = {
   lockPath: string;
   release: () => Promise<void>;
@@ -94,11 +100,7 @@ async function isLockStale(lockPath: string, staleMs: number): Promise<boolean> 
 
 export async function acquireAccountStoreLock(
   filePath = ACCOUNTS_FILE_PATH,
-  options?: {
-    timeoutMs?: number;
-    retryMs?: number;
-    staleMs?: number;
-  }
+  options?: LockOptions
 ): Promise<AccountStoreLock> {
   const lockPath = getAccountStoreLockPath(filePath);
   const timeoutMs = options?.timeoutMs ?? ACCOUNT_LOCK_TIMEOUT_MS;
@@ -158,11 +160,7 @@ export async function acquireAccountStoreLock(
 export async function withAccountStoreLock<T>(
   callback: () => Promise<T> | T,
   filePath = ACCOUNTS_FILE_PATH,
-  options?: {
-    timeoutMs?: number;
-    retryMs?: number;
-    staleMs?: number;
-  }
+  options?: LockOptions
 ): Promise<T> {
   const lock = await acquireAccountStoreLock(filePath, options);
   try {
@@ -211,7 +209,6 @@ export async function writeAccountStoreToDisk(store: AccountStore, filePath = AC
     });
     await chmod(tempPath, ACCOUNT_FILE_MODE);
     await rename(tempPath, filePath);
-    await chmod(filePath, ACCOUNT_FILE_MODE);
   } catch (error) {
     await rm(tempPath, { force: true }).catch(() => {
       // Best-effort cleanup of failed temp file.
@@ -223,11 +220,7 @@ export async function writeAccountStoreToDisk(store: AccountStore, filePath = AC
 export async function withLoadedAccountStore<T>(
   callback: (store: AccountStore) => Promise<T> | T,
   filePath = ACCOUNTS_FILE_PATH,
-  options?: {
-    timeoutMs?: number;
-    retryMs?: number;
-    staleMs?: number;
-  }
+  options?: LockOptions
 ): Promise<T> {
   return withAccountStoreLock(
     async () => {
@@ -242,11 +235,7 @@ export async function withLoadedAccountStore<T>(
 export async function mutateAccountStore<T>(
   mutator: (store: AccountStore) => Promise<{ store: AccountStore; result: T }> | { store: AccountStore; result: T },
   filePath = ACCOUNTS_FILE_PATH,
-  options?: {
-    timeoutMs?: number;
-    retryMs?: number;
-    staleMs?: number;
-  }
+  options?: LockOptions
 ): Promise<T> {
   return withAccountStoreLock(
     async () => {
@@ -254,6 +243,22 @@ export async function mutateAccountStore<T>(
       const { store, result } = await mutator(currentStore);
       await writeAccountStoreToDisk(store, filePath);
       return result;
+    },
+    filePath,
+    options
+  );
+}
+
+export async function updateAccountStore(
+  fn: (store: AccountStore) => void | Promise<void>,
+  filePath = ACCOUNTS_FILE_PATH,
+  options?: LockOptions
+): Promise<void> {
+  return withAccountStoreLock(
+    async () => {
+      const store = await readAccountStoreFromDisk(filePath);
+      await fn(store);
+      await writeAccountStoreToDisk(store, filePath);
     },
     filePath,
     options
