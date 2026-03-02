@@ -14,3 +14,7 @@ export const PI_AGENT_DIR = process.env["PI_CODING_AGENT_DIR"] ?? join(homedir()
 export const EXTENSION_STORAGE_DIR = join(PI_AGENT_DIR, "extensions", EXTENSION_ID);
 export const ACCOUNTS_FILE_PATH = join(EXTENSION_STORAGE_DIR, ACCOUNTS_FILE_NAME);
 export const ACCOUNTS_LOCK_FILE_PATH = `${ACCOUNTS_FILE_PATH}.lock`;
+
+export const ACCOUNT_LOCK_TIMEOUT_MS = 15_000;
+export const ACCOUNT_LOCK_RETRY_MS = 100;
+export const ACCOUNT_LOCK_STALE_MS = 120_000;

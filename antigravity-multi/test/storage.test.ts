@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -6,11 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ACCOUNT_FILE_MODE } from "../src/config.js";
 import {
+  acquireAccountStoreLock,
   createEmptyAccountStore,
   ensureStorageDir,
+  getAccountStoreLockPath,
   isAccountStore,
+  mutateAccountStore,
   parseAccountStore,
   readAccountStoreFromDisk,
+  withLoadedAccountStore,
   writeAccountStoreToDisk
 } from "../src/storage.js";
 import { ACCOUNT_STORE_VERSION, type AccountStore } from "../src/types.js";
@@ -210,5 +214,77 @@ describe("storage file helpers", () => {
     );
 
     await expect(readAccountStoreFromDisk(filePath)).rejects.toThrowError(/Invalid account store at/);
+  });
+});
+
+describe("storage lock helpers", () => {
+  it("derives lock path from account store path", () => {
+    expect(getAccountStoreLockPath("/tmp/accounts.json")).toBe("/tmp/accounts.json.lock");
+  });
+
+  it("creates and releases an exclusive lock file", async () => {
+    const root = await createTempDirectory();
+    const filePath = join(root, "accounts.json");
+    const lockPath = getAccountStoreLockPath(filePath);
+
+    const lock = await acquireAccountStoreLock(filePath, { timeoutMs: 1_000, retryMs: 10, staleMs: 500 });
+
+    await expect(access(lockPath)).resolves.toBeUndefined();
+
+    const lockBody = await readFile(lockPath, "utf-8");
+    expect(lockBody).toMatch(/pid=/);
+
+    await lock.release();
+
+    await expect(access(lockPath)).rejects.toBeDefined();
+  });
+
+  it("loads store under lock", async () => {
+    const root = await createTempDirectory();
+    const filePath = join(root, "accounts.json");
+    const initialStore = createStoreWithClaudeActive();
+
+    await writeAccountStoreToDisk(initialStore, filePath);
+
+    const loadedStore = await withLoadedAccountStore((store) => store, filePath);
+
+    expect(loadedStore).toEqual(initialStore);
+  });
+
+  it("mutates and persists store under lock", async () => {
+    const root = await createTempDirectory();
+    const filePath = join(root, "accounts.json");
+
+    const result = await mutateAccountStore(
+      (store) => {
+        const nextStore: AccountStore = {
+          ...store,
+          accounts: [
+            ...store.accounts,
+            {
+              email: "charlie@example.com",
+              refreshToken: "refresh-3",
+              projectId: "project-789",
+              enabled: true,
+              addedAt: 1_700_000_040_000,
+              lastUsed: null,
+              rateLimitResetTimes: {}
+            }
+          ]
+        };
+
+        return {
+          store: nextStore,
+          result: nextStore.accounts.length
+        };
+      },
+      filePath
+    );
+
+    expect(result).toBe(1);
+
+    const persistedStore = await readAccountStoreFromDisk(filePath);
+    expect(persistedStore.accounts).toHaveLength(1);
+    expect(persistedStore.accounts[0]?.email).toBe("charlie@example.com");
   });
 });
