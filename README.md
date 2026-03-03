@@ -24,7 +24,7 @@ npm run check
 ## Run extension in pi
 
 ```bash
-pi --extension /home/pael/playground/pi-ag-multi-auth/antigravity-multi/index.ts
+pi --extension /absolute/path/to/antigravity-multi/index.ts
 ```
 
 (Use `/reload` when loading via auto-discovery paths.)
